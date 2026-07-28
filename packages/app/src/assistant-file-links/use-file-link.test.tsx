@@ -324,6 +324,50 @@ describe("useFileLink", () => {
     });
     expect(openedFiles).toEqual([]);
   });
+
+  it("does not resolve a stale target after the daemon changes", async () => {
+    const deferred = createDeferred<DirectorySuggestionResult>();
+    const getDirectorySuggestions = vi.fn(() => deferred.promise);
+    const queryClient = createQueryClient();
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      const [serverId, setServerId] = useState("server-1");
+      const client = useMemo(() => ({ getDirectorySuggestions }), []);
+      return (
+        <QueryClientProvider client={queryClient}>
+          <AssistantFileLinkResolverProvider
+            client={client}
+            serverId={serverId}
+            workspaceRoot="/Users/test/project"
+          >
+            <ServerSwitchContext.Provider value={setServerId}>
+              {children}
+            </ServerSwitchContext.Provider>
+          </AssistantFileLinkResolverProvider>
+        </QueryClientProvider>
+      );
+    }
+
+    const { result } = renderHook(
+      () => ({
+        link: useFileLink(SOURCE),
+        setServerId: React.useContext(ServerSwitchContext),
+      }),
+      { wrapper: Wrapper },
+    );
+
+    let resolveTarget!: Promise<InlinePathTarget | null>;
+    act(() => {
+      resolveTarget = result.current.link.resolveFileTarget();
+    });
+    act(() => {
+      result.current.setServerId("server-2");
+    });
+    deferred.resolve(resolvedSuggestions([{ path: "docs/dumm.md", kind: "file" }]));
+
+    await expect(resolveTarget).resolves.toBeNull();
+  });
 });
 
 const WorkspaceSwitchContext = React.createContext<(workspaceRoot: string) => void>(() => {});
+const ServerSwitchContext = React.createContext<(serverId: string) => void>(() => {});

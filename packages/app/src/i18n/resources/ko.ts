@@ -394,6 +394,10 @@ export const ko: TranslationResources = {
       download: "다운로드",
       addToChat: "채팅에 추가",
       moreActions: "추가 작업",
+      openWithDefaultApp: "기본 앱으로 열기",
+      openWithDefaultAppFailed: "기본 앱으로 열 수 없습니다",
+      copyAbsolutePath: "전체 경로 복사",
+      copyAbsolutePathFailed: "전체 경로를 복사할 수 없습니다",
     },
     fileExplorer: {
       sort: {
