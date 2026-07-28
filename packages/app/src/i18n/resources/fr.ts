@@ -376,6 +376,10 @@ export const fr: TranslationResources = {
       download: "Télécharger",
       addToChat: "Ajouter au chat…",
       moreActions: "Plus de propositions",
+      openWithDefaultApp: "Ouvrir avec l'application par défaut",
+      openWithDefaultAppFailed: "Impossible d'ouvrir avec l'application par défaut",
+      copyAbsolutePath: "Copier le chemin complet",
+      copyAbsolutePathFailed: "Impossible de copier le chemin complet",
     },
     fileExplorer: {
       sort: {

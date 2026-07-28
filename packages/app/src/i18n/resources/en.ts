@@ -371,6 +371,10 @@ export const en = {
       download: "Download",
       addToChat: "Add to chat…",
       moreActions: "More actions",
+      openWithDefaultApp: "Open with default application",
+      openWithDefaultAppFailed: "Couldn't open with default application",
+      copyAbsolutePath: "Copy full path",
+      copyAbsolutePathFailed: "Couldn't copy full path",
     },
     fileExplorer: {
       sort: {

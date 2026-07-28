@@ -375,6 +375,10 @@ export const ru: TranslationResources = {
       download: "Скачать",
       addToChat: "Добавить в чат…",
       moreActions: "Дополнительные действия",
+      openWithDefaultApp: "Открыть в приложении по умолчанию",
+      openWithDefaultAppFailed: "Не удалось открыть в приложении по умолчанию",
+      copyAbsolutePath: "Копировать полный путь",
+      copyAbsolutePathFailed: "Не удалось скопировать полный путь",
     },
     fileExplorer: {
       sort: {

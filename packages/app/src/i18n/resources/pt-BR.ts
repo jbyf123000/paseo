@@ -376,6 +376,10 @@ export const ptBR: TranslationResources = {
       download: "Baixar",
       addToChat: "Adicionar ao chat…",
       moreActions: "Mais ações",
+      openWithDefaultApp: "Abrir com o aplicativo padrão",
+      openWithDefaultAppFailed: "Não foi possível abrir com o aplicativo padrão",
+      copyAbsolutePath: "Copiar caminho completo",
+      copyAbsolutePathFailed: "Não foi possível copiar o caminho completo",
     },
     fileExplorer: {
       sort: {

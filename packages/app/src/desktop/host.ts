@@ -61,6 +61,8 @@ export interface DesktopNotificationBridge {
 
 export interface DesktopOpenerBridge {
   openUrl?: (url: string) => Promise<void>;
+  /** Open a local absolute path with the OS default application (Electron shell.openPath). */
+  openPath?: (targetPath: string) => Promise<void>;
 }
 
 export interface DesktopEditorTargetDescriptor {

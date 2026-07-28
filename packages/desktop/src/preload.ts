@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
   },
   opener: {
     openUrl: (url: string) => ipcRenderer.invoke("paseo:opener:openUrl", url),
+    openPath: (targetPath: string) => ipcRenderer.invoke("paseo:opener:openPath", targetPath),
   },
   editor: {
     listTargets: () => ipcRenderer.invoke("paseo:editor:listTargets"),
