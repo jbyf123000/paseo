@@ -38,6 +38,8 @@ import {
 } from "./html-ish";
 import { resolveInlineImageSize, type InlineImageDimensions } from "./inline-image-size";
 import { groupMarkdownParts, type MarkdownPartGroup } from "./part-groups";
+import { createMathMarkdownRules } from "./math-rules";
+import { createMarkdownParser } from "./parser";
 
 export type MarkdownStyles = Record<string, TextStyle & ViewStyle & { [key: string]: unknown }>;
 
@@ -62,7 +64,7 @@ function compactMarkdownStyleMapping(theme: Theme): Partial<MarkdownWithStableRe
   return { style: createCompactMarkdownStyles(theme) };
 }
 
-const defaultMarkdownParser = MarkdownIt({ typographer: true, linkify: true });
+const defaultMarkdownParser = createMarkdownParser();
 const EMPTY_TEXT_STYLE: TextStyle = {};
 const MARKDOWN_LIST_ITEM_CONTENT_FLEX: ViewStyle = { flex: 1, flexShrink: 1, minWidth: 0 };
 export interface MarkdownRendererProps {
@@ -502,6 +504,7 @@ function getMarkdownLinkHref(node: ASTNode): string {
 
 export function createSharedMarkdownRules(): RenderRules {
   return {
+    ...createMathMarkdownRules(),
     text: (
       node: ASTNode,
       _children: ReactNode[],

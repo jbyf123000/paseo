@@ -62,6 +62,8 @@ import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "reac
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { MarkdownRenderer, type MarkdownStyles } from "@/components/markdown/renderer";
+import { createMathMarkdownRules } from "@/components/markdown/math-rules";
+import { createMarkdownParser } from "@/components/markdown/parser";
 import type { TodoEntry, UserMessageImageAttachment } from "@/types/stream";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
@@ -1583,7 +1585,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   spacing = "default",
 }: AssistantMessageProps) {
   const markdownParser = useMemo(() => {
-    const parser = MarkdownIt({ typographer: true, linkify: true });
+    const parser = createMarkdownParser();
     const defaultValidateLink = parser.validateLink.bind(parser);
     parser.validateLink = (url: string) => {
       if (url.trim().toLowerCase().startsWith("file://")) {
@@ -1605,6 +1607,7 @@ export const AssistantMessage = memo(function AssistantMessage({
 
   const markdownRules = useMemo<RenderRules>(() => {
     return {
+      ...createMathMarkdownRules(),
       text: (
         node: ASTNode,
         _children: ReactNode[],
