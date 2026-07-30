@@ -55,13 +55,20 @@ function parseArgs(argv) {
   return options;
 }
 
+function resolveExecutable(command) {
+  if (process.platform === "win32" && (command === "npm" || command === "npx")) {
+    return `${command}.cmd`;
+  }
+  return command;
+}
+
 function run(command, args, { env = process.env } = {}) {
   console.log(`\n> ${command} ${args.join(" ")}`);
-  execFileSync(command, args, { cwd: rootDir, env, stdio: "inherit" });
+  execFileSync(resolveExecutable(command), args, { cwd: rootDir, env, stdio: "inherit" });
 }
 
 function runQuiet(command, args) {
-  return execFileSync(command, args, {
+  return execFileSync(resolveExecutable(command), args, {
     cwd: rootDir,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
