@@ -22,7 +22,7 @@ const workflowDir = path.join(rootDir, ".dev", "custom-installer");
 
 function usageAndExit(code = 0) {
   process.stderr.write(
-    "Usage: node scripts/sync-fork-build-installer.mjs [--proxy <url>] [--sync-only | --build-only] [--no-push]\n",
+    "Usage: node scripts/sync-fork-build-installer.mjs [--proxy <url>] [--sync-only | --build-only] [--no-push] [--force-build]\n",
   );
   process.exit(code);
 }
@@ -33,6 +33,7 @@ function parseArgs(argv) {
     syncOnly: false,
     buildOnly: false,
     push: true,
+    forceBuild: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -53,6 +54,10 @@ function parseArgs(argv) {
     }
     if (arg === "--no-push") {
       options.push = false;
+      continue;
+    }
+    if (arg === "--force-build") {
+      options.forceBuild = true;
       continue;
     }
     if (arg === "--help" || arg === "-h") usageAndExit(0);
@@ -297,7 +302,7 @@ async function ensureDependencies(env) {
   writeDependencyStamp(stampFile, lockSha256);
 }
 
-async function buildInstaller(proxy) {
+async function buildInstaller({ forceBuild, proxy }) {
   if (process.platform !== "win32") throw new Error("Windows installer builds require Windows.");
   const currentBranch = runQuiet("git", ["branch", "--show-current"]);
   if (currentBranch !== integrationBranch) {
@@ -306,36 +311,41 @@ async function buildInstaller(proxy) {
     );
   }
 
-  const env = proxyEnvironment(proxy);
-  await ensureDependencies(env);
-
   const commit = runQuiet("git", ["rev-parse", "--short=12", "HEAD"]);
-  const outputDir = path.join(rootDir, "packages", "desktop", "release", "custom", commit);
-  const buildLog = path.join(workflowDir, `build-${commit}.log`);
-  runLogged(
-    "npm",
-    [
-      "run",
-      "build:desktop",
-      "--",
-      "--win",
-      "nsis",
-      "--x64",
-      "--publish",
-      "never",
-      "--config.win.signAndEditExecutable=false",
-      `--config.directories.output=${outputDir}`,
-    ],
-    buildLog,
-    { env },
-  );
-
+  const outputKey = forceBuild ? `${commit}-${Date.now()}` : commit;
+  const outputDir = path.join(rootDir, "packages", "desktop", "release", "custom", outputKey);
   const rootPackage = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8"));
   const installer = path.join(outputDir, `Paseo-Setup-${rootPackage.version}-x64.exe`);
-  if (!existsSync(installer)) throw new Error(`Installer was not produced: ${installer}`);
+  let buildLog = "";
 
+  if (existsSync(installer)) {
+    console.log(`\nInstaller already exists for ${commit}; skipping build.`);
+  } else {
+    const env = proxyEnvironment(proxy);
+    await ensureDependencies(env);
+    buildLog = path.join(workflowDir, `build-${outputKey}.log`);
+    runLogged(
+      "npm",
+      [
+        "run",
+        "build:desktop",
+        "--",
+        "--win",
+        "nsis",
+        "--x64",
+        "--publish",
+        "never",
+        "--config.win.signAndEditExecutable=false",
+        `--config.directories.output=${outputDir}`,
+      ],
+      buildLog,
+      { env },
+    );
+  }
+
+  if (!existsSync(installer)) throw new Error(`Installer was not produced: ${installer}`);
   const sevenZip = path.join(rootDir, "node_modules", "7zip-bin", "win", "x64", "7za.exe");
-  runLogged(sevenZip, ["t", installer], path.join(workflowDir, `archive-${commit}.log`));
+  runLogged(sevenZip, ["t", installer], path.join(workflowDir, `archive-${outputKey}.log`));
   const size = statSync(installer).size;
   const checksum = await sha256(installer);
   assertClean();
@@ -344,10 +354,10 @@ async function buildInstaller(proxy) {
   console.log(`Path: ${installer}`);
   console.log(`Size: ${size} bytes`);
   console.log(`SHA-256: ${checksum}`);
-  console.log(`Build log: ${buildLog}`);
+  if (buildLog) console.log(`Build log: ${buildLog}`);
 }
 
 const options = parseArgs(process.argv.slice(2));
 assertClean();
 if (!options.buildOnly) syncAndMerge(options);
-if (!options.syncOnly) await buildInstaller(options.proxy);
+if (!options.syncOnly) await buildInstaller(options);

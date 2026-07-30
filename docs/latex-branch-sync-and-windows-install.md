@@ -25,7 +25,7 @@ npm run custom:sync-build-installer
 packages/desktop/release/custom/<commit>/Paseo-Setup-<version>-x64.exe
 ```
 
-依赖安装和构建的长输出写入 `.dev/custom-installer/`；成功时终端只显示阶段和最终结果，失败时打印日志末尾。脚本只构建，不安装，避免覆盖正在管理 Agent/daemon 的 Paseo 实例。
+依赖安装和构建的长输出写入 `.dev/custom-installer/`；成功时终端只显示阶段和最终结果，失败时打印日志末尾。同一提交已有通过校验的 Installer 时直接复用，不再编译。脚本只构建，不安装，避免覆盖正在管理 Agent/daemon 的 Paseo 实例。
 
 ## 参数
 
@@ -38,6 +38,9 @@ npm run custom:sync-build-installer -- --sync-only
 
 # 当前必须位于 integration/custom-vnext；只准备依赖和构建
 npm run custom:sync-build-installer -- --build-only
+
+# 忽略已有产物并重新构建；使用独立时间戳目录避免旧文件锁
+npm run custom:sync-build-installer -- --build-only --force-build
 
 # 完成本地同步和合并但不推送远程
 npm run custom:sync-build-installer -- --sync-only --no-push
