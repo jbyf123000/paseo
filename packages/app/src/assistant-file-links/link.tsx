@@ -8,16 +8,32 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
-import { isNative, isWeb } from "@/constants/platform";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
+import * as Clipboard from "expo-clipboard";
+import { AppWindow, Copy } from "lucide-react-native";
+import { getIsElectron, isNative, isWeb } from "@/constants/platform";
 import { MarkdownTextSpan } from "@/components/markdown-text";
 import { AssistantLinkPressProvider, type AssistantLinkPress } from "./link-press-context";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/contexts/toast-context";
+import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
+import type { Theme } from "@/styles/theme";
+import {
+  canOpenLocalPathWithDefaultApp,
+  openLocalPathWithDefaultApp,
+} from "@/utils/open-local-path";
 import { useAssistantFileLinkResolverContext } from "./provider";
-import type { AssistantFileLinkSource } from "./resolver";
+import { classifyForResolution, type AssistantFileLinkSource } from "./resolver";
 import { useFileLink } from "./use-file-link";
 
 interface AssistantMarkdownLinkProps {
@@ -27,6 +43,12 @@ interface AssistantMarkdownLinkProps {
   children: ReactNode;
 }
 
+const ThemedAppWindow = withUnistyles(AppWindow);
+const ThemedCopy = withUnistyles(Copy);
+const mutedIconColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const openWithDefaultLeading = <ThemedAppWindow size={14} uniProps={mutedIconColorMapping} />;
+const copyAbsolutePathLeading = <ThemedCopy size={14} uniProps={mutedIconColorMapping} />;
+
 export function AssistantMarkdownLink({
   source,
   style,
@@ -34,9 +56,29 @@ export function AssistantMarkdownLink({
   children,
 }: AssistantMarkdownLinkProps) {
   const [hovered, setHovered] = useState(false);
-  const { target, onHoverIn, onPress, onAuxPress } = useFileLink(source);
-  const { configRef } = useAssistantFileLinkResolverContext();
+  const { t } = useTranslation();
+  const toast = useToast();
+  const { target, onHoverIn, onPress, onAuxPress, resolveFileTarget } = useFileLink(source);
+  const { configRef, serverId } = useAssistantFileLinkResolverContext();
   const workspaceRoot = configRef.current.workspaceRoot;
+  // Only hide when we know the active host is a remote daemon. While the local
+  // daemon id is still loading (null), keep the item available on Electron —
+  // otherwise the OS default Copy/Paste menu wins and the feature looks missing.
+  const localDaemonServerId = useLocalDaemonServerId();
+  const isDefinitelyRemoteDaemon =
+    localDaemonServerId !== null &&
+    (serverId ?? "").trim().length > 0 &&
+    localDaemonServerId !== (serverId ?? "").trim();
+  const canResolveToFile = useMemo(() => {
+    const resolution = classifyForResolution(source, { workspaceRoot });
+    return resolution.kind === "needsLookup" || resolution.value.kind === "file";
+  }, [source, workspaceRoot]);
+  const showFileLinkContextMenu =
+    isWeb &&
+    getIsElectron() &&
+    !isDefinitelyRemoteDaemon &&
+    canOpenLocalPathWithDefaultApp() &&
+    canResolveToFile;
   const tooltipPath = useMemo(
     () => (target ? formatInlinePathTargetForTooltip(target, workspaceRoot) : null),
     [target, workspaceRoot],
@@ -54,6 +96,38 @@ export function AssistantMarkdownLink({
     onHoverIn();
   });
   const handleHoverOut = useStableEvent(() => setHovered(false));
+  const handleOpenWithDefaultApp = useStableEvent(() => {
+    void (async () => {
+      try {
+        const fileTarget = await resolveFileTarget();
+        if (!fileTarget) {
+          return;
+        }
+        const opened = await openLocalPathWithDefaultApp(fileTarget.path);
+        if (!opened) {
+          toast.error(t("workspace.fileActions.openWithDefaultAppFailed"));
+        }
+      } catch (error) {
+        console.warn("[assistant-file-link] open with default app failed", error);
+        toast.error(t("workspace.fileActions.openWithDefaultAppFailed"));
+      }
+    })();
+  });
+  const handleCopyAbsolutePath = useStableEvent(() => {
+    void (async () => {
+      try {
+        const fileTarget = await resolveFileTarget();
+        if (!fileTarget) {
+          return;
+        }
+        await Clipboard.setStringAsync(fileTarget.path);
+        toast.copied(t("workspace.fileActions.copyAbsolutePath"));
+      } catch (error) {
+        console.warn("[assistant-file-link] copy absolute path failed", error);
+        toast.error(t("workspace.fileActions.copyAbsolutePathFailed"));
+      }
+    })();
+  });
   const hoveredTextStyle = useMemo<StyleProp<TextStyle>>(
     () => [style, hovered && { textDecorationLine: "underline" as const }],
     [style, hovered],
@@ -118,7 +192,37 @@ export function AssistantMarkdownLink({
     </a>
   );
 
-  return <FileLinkHoverTooltip filePath={tooltipPath}>{anchor}</FileLinkHoverTooltip>;
+  const linkWithTooltip = (
+    <FileLinkHoverTooltip filePath={tooltipPath}>{anchor}</FileLinkHoverTooltip>
+  );
+
+  if (!showFileLinkContextMenu) {
+    return linkWithTooltip;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger enabledOnMobile={false} style={FILE_LINK_CONTEXT_TRIGGER_STYLE}>
+        {linkWithTooltip}
+      </ContextMenuTrigger>
+      <ContextMenuContent align="start" minWidth={220} testID="assistant-file-link-context-menu">
+        <ContextMenuItem
+          leading={openWithDefaultLeading}
+          onSelect={handleOpenWithDefaultApp}
+          testID="assistant-file-link-open-with-default-app"
+        >
+          {t("workspace.fileActions.openWithDefaultApp")}
+        </ContextMenuItem>
+        <ContextMenuItem
+          leading={copyAbsolutePathLeading}
+          onSelect={handleCopyAbsolutePath}
+          testID="assistant-file-link-copy-absolute-path"
+        >
+          {t("workspace.fileActions.copyAbsolutePath")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 interface AssistantMarkdownCodeLinkProps {
@@ -216,6 +320,10 @@ export function AssistantInlineCodePathLink({
 const FILE_LINK_TOOLTIP_TRIGGER_STYLE: ViewStyle = {
   // RN doesn't type "inline-flex" but RN-web honors it at runtime, which keeps
   // the tooltip wrapper from breaking inline link flow.
+  display: "inline-flex" as ViewStyle["display"],
+};
+
+const FILE_LINK_CONTEXT_TRIGGER_STYLE: ViewStyle = {
   display: "inline-flex" as ViewStyle["display"],
 };
 

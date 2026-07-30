@@ -32,6 +32,8 @@ export interface AssistantFileLinkResolverProviderProps extends AssistantFileLin
 export interface AssistantFileLinkResolverContextValue {
   configRef: MutableRefObject<AssistantFileLinkResolverConfig>;
   getDirectorySuggestions: GetDirectorySuggestions;
+  /** Reactive copy of the active server id for hooks that re-render on host changes. */
+  serverId?: string;
 }
 
 const AssistantFileLinkResolverContext =
@@ -65,8 +67,8 @@ export function AssistantFileLinkResolverProvider({
   }, []);
 
   const value = useMemo<AssistantFileLinkResolverContextValue>(
-    () => ({ configRef, getDirectorySuggestions }),
-    [getDirectorySuggestions],
+    () => ({ configRef, getDirectorySuggestions, serverId }),
+    [getDirectorySuggestions, serverId],
   );
 
   return (

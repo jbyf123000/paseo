@@ -376,6 +376,10 @@ export const ja: TranslationResources = {
       download: "ダウンロード",
       addToChat: "チャットに追加…",
       moreActions: "その他のアクション",
+      openWithDefaultApp: "デフォルトのアプリで開く",
+      openWithDefaultAppFailed: "デフォルトのアプリで開けませんでした",
+      copyAbsolutePath: "フルパスをコピー",
+      copyAbsolutePathFailed: "フルパスをコピーできませんでした",
     },
     fileExplorer: {
       sort: {

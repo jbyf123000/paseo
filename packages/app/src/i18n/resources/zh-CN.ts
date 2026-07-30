@@ -372,6 +372,10 @@ export const zhCN: TranslationResources = {
       download: "下载",
       addToChat: "添加到聊天…",
       moreActions: "更多操作",
+      openWithDefaultApp: "使用默认应用打开",
+      openWithDefaultAppFailed: "无法使用默认应用打开",
+      copyAbsolutePath: "复制完整路径",
+      copyAbsolutePathFailed: "无法复制完整路径",
     },
     fileExplorer: {
       sort: {

@@ -372,6 +372,10 @@ export const ar: TranslationResources = {
       download: "تحميل",
       addToChat: "إضافة إلى الدردشة…",
       moreActions: "المزيد من الإجراءات",
+      openWithDefaultApp: "Open with default application",
+      openWithDefaultAppFailed: "Couldn't open with default application",
+      copyAbsolutePath: "Copy full path",
+      copyAbsolutePathFailed: "Couldn't copy full path",
     },
     fileExplorer: {
       sort: {
