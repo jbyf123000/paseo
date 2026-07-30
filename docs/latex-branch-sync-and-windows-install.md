@@ -1,107 +1,56 @@
-# LaTeX 分支同步 main、构建并覆盖 Windows 安装
+# 同步 fork、自定义分支和 Windows Installer
 
-此流程只用于 `feature/latex-support`：先检查远端 `origin/main` 是否有新提交；有则合并到当前分支；随后构建 x64 Windows NSIS 安装包并覆盖当前用户的 Paseo 安装。
+此流程由 `scripts/sync-fork-build-installer.mjs` 维护。不要重复手工执行 fetch、merge、代理配置和 electron-builder 命令。
 
-## 前提
+## 一键执行
 
-- 当前分支必须是 `feature/latex-support`。
-- LaTeX 改动必须已经提交；脚本拒绝在工作区有未提交文件时运行，避免把构建输出或未完成修改混入 merge。
-- 先正常关闭所有 Paseo 窗口。脚本不会强制终止 `Paseo.exe`，因为桌面应用可能管理本地 Agent/daemon。
-- Windows 构建使用本机 HTTP 代理 `http://127.0.0.1:7890` 下载 Electron/electron-builder 依赖。
-
-## 一次性执行
-
-从仓库根目录以 PowerShell 运行以下命令：
+在仓库根目录运行：
 
 ```powershell
-$ErrorActionPreference = "Stop"
-
-$expectedBranch = "feature/latex-support"
-$currentBranch = (git branch --show-current).Trim()
-if ($currentBranch -ne $expectedBranch) {
-  throw "Expected branch '$expectedBranch', got '$currentBranch'."
-}
-
-if (git status --porcelain) {
-  throw "Working tree is not clean. Commit or stash changes before syncing main."
-}
-
-git fetch origin main
-if ($LASTEXITCODE -ne 0) {
-  throw "Unable to fetch origin/main."
-}
-
-$mainCommitsToMerge = [int](git rev-list --count "HEAD..origin/main")
-if ($mainCommitsToMerge -gt 0) {
-  git merge --no-ff origin/main
-  if ($LASTEXITCODE -ne 0) {
-    throw "Merge conflict or merge failure. Resolve it, commit the merge, then rerun this procedure."
-  }
-} else {
-  Write-Host "origin/main has no commits missing from $expectedBranch; merge skipped."
-}
-
-$env:npm_config_proxy = "http://127.0.0.1:7890"
-$env:npm_config_https_proxy = "http://127.0.0.1:7890"
-
-# --publish never keeps this local build from attempting a GitHub Release.
-# signAndEditExecutable=false avoids electron-builder's winCodeSign symlink
-# extraction on Windows machines without Developer Mode or symlink privilege.
-npm run build:desktop -- --win nsis --x64 --publish never -c.win.signAndEditExecutable=false
-if ($LASTEXITCODE -ne 0) {
-  throw "Windows installer build failed."
-}
-
-$installer = Get-ChildItem "packages/desktop/release/Paseo-Setup-*-x64.exe" |
-  Sort-Object LastWriteTimeUtc -Descending |
-  Select-Object -First 1
-if (-not $installer) {
-  throw "Windows installer was not produced."
-}
-
-if (Get-Process -Name Paseo -ErrorAction SilentlyContinue) {
-  throw "Close all Paseo windows before installing; no process was terminated."
-}
-
-$installDirectory = Join-Path $env:LOCALAPPDATA "Programs/Paseo"
-$installResult = Start-Process -FilePath $installer.FullName `
-  -ArgumentList @("/S", "/D=$installDirectory") `
-  -Wait -PassThru
-if ($installResult.ExitCode -ne 0) {
-  throw "Installer failed with exit code $($installResult.ExitCode)."
-}
-
-$installedExecutable = Join-Path $installDirectory "Paseo.exe"
-$uninstaller = Join-Path $installDirectory "Uninstall Paseo.exe"
-if (-not (Test-Path $installedExecutable) -or -not (Test-Path $uninstaller)) {
-  throw "Installer exited successfully but the expected installation files are missing."
-}
-
-Get-Item $installer.FullName, $installedExecutable, $uninstaller |
-  Select-Object FullName, Length, LastWriteTime
-Get-FileHash $installer.FullName -Algorithm SHA256
+npm run custom:sync-build-installer
 ```
 
-`/D=...` 必须是 NSIS 安装程序的最后一个参数。它明确指定当前用户安装位置：
+脚本固定执行以下流程：
+
+1. 拒绝未提交的工作区，配置并刷新官方远程 `https://github.com/getpaseo/paseo.git`。
+2. 比较官方 `main` 与两个功能分支修改的同名文件，并用 `git merge-tree` 预检冲突。
+3. 仅在能够 fast-forward 时同步 `main`，随后推送 `origin/main`；不会强推或把自定义提交放进 `main`。
+4. 把 `main`、`feature/latex-support`、`feature/open-file-with-default-app` 依次合并到 `integration/custom-vnext`，随后推送该集成分支。重复运行时，已经合并的提交会自动跳过。
+5. 通过 `http://127.0.0.1:7890` 执行 `npm ci`，构建 Windows x64 NSIS Installer。
+6. 用 7-Zip 检查安装包完整性，并输出文件路径、字节数和 SHA-256。
+
+默认产物：
 
 ```text
-%LOCALAPPDATA%\Programs\Paseo
+packages/desktop/release/Paseo-Setup-<version>-x64.exe
 ```
 
-## 合并冲突处理
+脚本只构建，不安装，避免覆盖正在管理 Agent/daemon 的 Paseo 实例。
 
-脚本在 `git merge` 失败时停止，不会构建或安装。处理冲突后执行：
+## 参数
 
 ```powershell
-git add <resolved-files>
-git commit
-git status --short
+# 使用其他 HTTP 代理
+npm run custom:sync-build-installer -- --proxy http://127.0.0.1:7891
+
+# 只同步和合并，不下载依赖或构建
+npm run custom:sync-build-installer -- --sync-only
+
+# 当前必须位于 integration/custom-vnext；只重新安装依赖和构建
+npm run custom:sync-build-installer -- --build-only
+
+# 完成本地同步和合并但不推送远程
+npm run custom:sync-build-installer -- --sync-only --no-push
 ```
 
-确认工作区重新干净后，从“**一次性执行**”的开头重新运行。
+## 失败处理
+
+- `Working tree must be clean`：提交或暂存当前工作后重试。
+- `origin/main has commits not present in upstream/main`：Fork 主分支已分叉。脚本不会覆盖它；先人工确认这些提交的去向。
+- `Merge preflight failed`：官方与功能分支存在文本冲突。脚本在修改 `main` 前停止。
+- 实际 merge 失败：解决冲突并提交，确认工作区干净后用 `--build-only` 继续构建。
+- 代理不可用：启动本机 7890 代理，或用 `--proxy` 指定其他地址。
 
 ## 本机构建限制
 
-`-c.win.signAndEditExecutable=false` 是本机无符号链接权限时的构建规避项。它跳过 Windows EXE 的签名、图标和版本元数据资源编辑；适合本地验证和覆盖安装，不适合正式发布。正式发布应在具备 Windows Developer Mode/符号链接权限及签名环境的构建机上运行常规发布流程。
-
-该流程只覆盖当前用户的安装目录；它不会删除独立的系统级安装，例如 `C:\Program Files\Paseo`。
+本机没有 electron-builder 旧版 `winCodeSign` 解压符号链接所需的权限。脚本使用 `--config.win.signAndEditExecutable=false` 和 `--publish never` 构建本地安装包：不发布 GitHub Release，也不执行 Windows EXE 的签名、图标和版本资源编辑。产物适合本地验证，不适合正式发布；正式发布继续使用 [release.md](release.md) 的签名 CI 流程。

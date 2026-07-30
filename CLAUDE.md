@@ -95,6 +95,10 @@ npm run format                       # Auto-format with Biome
 npm run format:check                 # Check formatting without writing
 ```
 
+### Custom fork sync and Windows installer
+
+When asked to refresh this fork, merge the two local feature branches, and build a Windows installer, run `npm run custom:sync-build-installer` instead of replaying Git and electron-builder commands. The script keeps `main` identical to `getpaseo/paseo`, merges `feature/latex-support` and `feature/open-file-with-default-app` into `integration/custom-vnext`, uses `http://127.0.0.1:7890` for npm/Electron downloads, builds the local unsigned x64 NSIS installer, and prints its SHA-256. It refuses dirty trees, divergent fork mains, and detected merge conflicts. See [docs/latex-branch-sync-and-windows-install.md](docs/latex-branch-sync-and-windows-install.md) for flags and recovery.
+
 Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. The packaged desktop app and production-style daemon keep using `~/.paseo` on port `6767`.
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
