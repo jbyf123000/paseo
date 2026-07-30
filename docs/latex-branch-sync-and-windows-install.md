@@ -16,16 +16,16 @@ npm run custom:sync-build-installer
 2. 比较官方 `main` 与两个功能分支修改的同名文件，并用 `git merge-tree` 预检冲突。
 3. 仅在能够 fast-forward 时同步 `main`，随后推送 `origin/main`；不会强推或把自定义提交放进 `main`。
 4. 把 `main`、`feature/latex-support`、`feature/open-file-with-default-app` 依次合并到 `integration/custom-vnext`，随后推送该集成分支。重复运行时，已经合并的提交会自动跳过。
-5. 通过 `http://127.0.0.1:7890` 执行 `npm ci`，构建 Windows x64 NSIS Installer。
+5. 通过 `http://127.0.0.1:7890` 准备依赖并构建 Windows x64 NSIS Installer。`package-lock.json`、Node 版本和关键依赖未变化时跳过 `npm ci`。
 6. 用 7-Zip 检查安装包完整性，并输出文件路径、字节数和 SHA-256。
 
-默认产物：
+产物按 Git 提交隔离，避免杀毒软件锁住同名旧文件：
 
 ```text
-packages/desktop/release/Paseo-Setup-<version>-x64.exe
+packages/desktop/release/custom/<commit>/Paseo-Setup-<version>-x64.exe
 ```
 
-脚本只构建，不安装，避免覆盖正在管理 Agent/daemon 的 Paseo 实例。
+依赖安装和构建的长输出写入 `.dev/custom-installer/`；成功时终端只显示阶段和最终结果，失败时打印日志末尾。脚本只构建，不安装，避免覆盖正在管理 Agent/daemon 的 Paseo 实例。
 
 ## 参数
 
@@ -36,7 +36,7 @@ npm run custom:sync-build-installer -- --proxy http://127.0.0.1:7891
 # 只同步和合并，不下载依赖或构建
 npm run custom:sync-build-installer -- --sync-only
 
-# 当前必须位于 integration/custom-vnext；只重新安装依赖和构建
+# 当前必须位于 integration/custom-vnext；只准备依赖和构建
 npm run custom:sync-build-installer -- --build-only
 
 # 完成本地同步和合并但不推送远程

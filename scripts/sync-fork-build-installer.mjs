@@ -1,6 +1,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +18,7 @@ const upstreamUrl = "https://github.com/getpaseo/paseo.git";
 const mainBranch = "main";
 const integrationBranch = "integration/custom-vnext";
 const featureBranches = ["feature/latex-support", "feature/open-file-with-default-app"];
+const workflowDir = path.join(rootDir, ".dev", "custom-installer");
 
 function usageAndExit(code = 0) {
   process.stderr.write(
@@ -71,6 +81,25 @@ function run(command, args, { env = process.env } = {}) {
   console.log(`\n> ${command} ${args.join(" ")}`);
   const invocation = resolveInvocation(command, args);
   execFileSync(invocation.executable, invocation.args, { cwd: rootDir, env, stdio: "inherit" });
+}
+function runLogged(command, args, logFile, { env = process.env } = {}) {
+  mkdirSync(path.dirname(logFile), { recursive: true });
+  console.log(`\n> ${command} ${args.join(" ")}\n  log: ${logFile}`);
+  const invocation = resolveInvocation(command, args);
+  const logDescriptor = openSync(logFile, "w");
+  const result = spawnSync(invocation.executable, invocation.args, {
+    cwd: rootDir,
+    env,
+    stdio: ["ignore", logDescriptor, logDescriptor],
+  });
+  closeSync(logDescriptor);
+
+  if (result.error || result.status !== 0) {
+    const tail = readFileSync(logFile, "utf8").split(/\r?\n/u).slice(-80).join("\n");
+    process.stderr.write(`${tail}\n`);
+    throw result.error ?? new Error(`${command} exited with status ${result.status}.`);
+  }
+  console.log("  completed");
 }
 
 function runQuiet(command, args) {
@@ -217,6 +246,57 @@ async function sha256(file) {
   return hash.digest("hex");
 }
 
+function dependencyFilesExist() {
+  return [
+    path.join(rootDir, "node_modules", ".package-lock.json"),
+    path.join(rootDir, "node_modules", "electron", "dist", "electron.exe"),
+    path.join(rootDir, "node_modules", "7zip-bin", "win", "x64", "7za.exe"),
+  ].every(existsSync);
+}
+
+function writeDependencyStamp(stampFile, lockSha256) {
+  writeFileSync(
+    stampFile,
+    `${JSON.stringify({ lockSha256, node: process.version, platform: process.platform, arch: process.arch })}\n`,
+  );
+}
+
+async function ensureDependencies(env) {
+  mkdirSync(workflowDir, { recursive: true });
+  const lockFile = path.join(rootDir, "package-lock.json");
+  const hiddenLockFile = path.join(rootDir, "node_modules", ".package-lock.json");
+  const stampFile = path.join(workflowDir, "dependencies.json");
+  const lockSha256 = await sha256(lockFile);
+
+  if (dependencyFilesExist() && existsSync(stampFile)) {
+    try {
+      const stamp = JSON.parse(readFileSync(stampFile, "utf8"));
+      if (
+        stamp.lockSha256 === lockSha256 &&
+        stamp.node === process.version &&
+        stamp.platform === process.platform &&
+        stamp.arch === process.arch
+      ) {
+        console.log("\nDependencies unchanged; skipping npm ci.");
+        return;
+      }
+    } catch {
+      // A malformed local stamp is a cache miss.
+    }
+  }
+
+  if (dependencyFilesExist() && statSync(hiddenLockFile).mtimeMs >= statSync(lockFile).mtimeMs) {
+    writeDependencyStamp(stampFile, lockSha256);
+    console.log("\nExisting npm dependency tree is current; skipping npm ci.");
+    return;
+  }
+
+  runLogged("npm", ["ci", "--foreground-scripts"], path.join(workflowDir, "npm-ci.log"), {
+    env,
+  });
+  writeDependencyStamp(stampFile, lockSha256);
+}
+
 async function buildInstaller(proxy) {
   if (process.platform !== "win32") throw new Error("Windows installer builds require Windows.");
   const currentBranch = runQuiet("git", ["branch", "--show-current"]);
@@ -227,8 +307,12 @@ async function buildInstaller(proxy) {
   }
 
   const env = proxyEnvironment(proxy);
-  run("npm", ["ci", "--foreground-scripts"], { env });
-  run(
+  await ensureDependencies(env);
+
+  const commit = runQuiet("git", ["rev-parse", "--short=12", "HEAD"]);
+  const outputDir = path.join(rootDir, "packages", "desktop", "release", "custom", commit);
+  const buildLog = path.join(workflowDir, `build-${commit}.log`);
+  runLogged(
     "npm",
     [
       "run",
@@ -240,22 +324,18 @@ async function buildInstaller(proxy) {
       "--publish",
       "never",
       "--config.win.signAndEditExecutable=false",
+      `--config.directories.output=${outputDir}`,
     ],
+    buildLog,
     { env },
   );
 
   const rootPackage = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8"));
-  const installer = path.join(
-    rootDir,
-    "packages",
-    "desktop",
-    "release",
-    `Paseo-Setup-${rootPackage.version}-x64.exe`,
-  );
+  const installer = path.join(outputDir, `Paseo-Setup-${rootPackage.version}-x64.exe`);
   if (!existsSync(installer)) throw new Error(`Installer was not produced: ${installer}`);
 
   const sevenZip = path.join(rootDir, "node_modules", "7zip-bin", "win", "x64", "7za.exe");
-  run(sevenZip, ["t", installer]);
+  runLogged(sevenZip, ["t", installer], path.join(workflowDir, `archive-${commit}.log`));
   const size = statSync(installer).size;
   const checksum = await sha256(installer);
   assertClean();
@@ -264,6 +344,7 @@ async function buildInstaller(proxy) {
   console.log(`Path: ${installer}`);
   console.log(`Size: ${size} bytes`);
   console.log(`SHA-256: ${checksum}`);
+  console.log(`Build log: ${buildLog}`);
 }
 
 const options = parseArgs(process.argv.slice(2));
