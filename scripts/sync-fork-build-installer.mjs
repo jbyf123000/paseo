@@ -55,20 +55,27 @@ function parseArgs(argv) {
   return options;
 }
 
-function resolveExecutable(command) {
-  if (process.platform === "win32" && (command === "npm" || command === "npx")) {
-    return `${command}.cmd`;
+function resolveInvocation(command, args) {
+  if (command !== "npm") return { executable: command, args };
+
+  const npmCli =
+    process.env.npm_execpath ??
+    path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  if (!existsSync(npmCli)) {
+    throw new Error("Cannot locate npm CLI. Run this workflow through its npm script.");
   }
-  return command;
+  return { executable: process.execPath, args: [npmCli, ...args] };
 }
 
 function run(command, args, { env = process.env } = {}) {
   console.log(`\n> ${command} ${args.join(" ")}`);
-  execFileSync(resolveExecutable(command), args, { cwd: rootDir, env, stdio: "inherit" });
+  const invocation = resolveInvocation(command, args);
+  execFileSync(invocation.executable, invocation.args, { cwd: rootDir, env, stdio: "inherit" });
 }
 
 function runQuiet(command, args) {
-  return execFileSync(resolveExecutable(command), args, {
+  const invocation = resolveInvocation(command, args);
+  return execFileSync(invocation.executable, invocation.args, {
     cwd: rootDir,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
