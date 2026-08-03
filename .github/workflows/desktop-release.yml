@@ -56,7 +56,7 @@ env:
 
 jobs:
   create-release:
-    if: ${{ (github.event_name == 'push' && !startsWith(github.ref_name, 'desktop-macos-v') && !startsWith(github.ref_name, 'desktop-linux-v') && !startsWith(github.ref_name, 'desktop-windows-v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'all' && github.event.inputs.publish != 'false') }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'false') }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -166,6 +166,20 @@ jobs:
           build_args+=("-c.publish.channel=$RELEASE_CHANNEL")
           npm run build:desktop "${build_args[@]}"
 
+
+      - name: Verify Apple Silicon DMG
+        if: matrix.electron_arch == 'arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmg_files=("${DESKTOP_PACKAGE_PATH}/release/"*-arm64.dmg)
+          if (( ${#dmg_files[@]} != 1 )); then
+            echo "::error::Expected exactly one Apple Silicon DMG, found ${#dmg_files[@]}"
+            printf '  %s\n' "${dmg_files[@]}"
+            exit 1
+          fi
+          echo "Apple Silicon DMG: ${dmg_files[0]}"
       - name: Upload packaged smoke diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
