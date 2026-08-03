@@ -25,6 +25,10 @@ test("manual fork macOS releases create a release and verify the arm64 DMG", () 
     { runner: "macos-14", electron_arch: "arm64" },
   );
 
+  const buildStep = getMacStep("Build desktop release");
+  assert.match(buildStep.run, /unset CSC_LINK CSC_KEY_PASSWORD/);
+  assert.match(buildStep.run, /No Apple certificate configured/);
+
   const verifyStep = getMacStep("Verify Apple Silicon DMG");
   assert.equal(verifyStep.if, "matrix.electron_arch == 'arm64'");
   assert.match(verifyStep.run, /-arm64\.dmg/);
