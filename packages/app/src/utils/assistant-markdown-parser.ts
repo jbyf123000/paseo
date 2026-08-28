@@ -1,11 +1,8 @@
 import MarkdownIt from "markdown-it";
+import { createMarkdownParser } from "@/components/markdown/parser";
 
 export function createAssistantMarkdownParser(): MarkdownIt {
-  const parser = new MarkdownIt({
-    html: false,
-    linkify: true,
-    typographer: true,
-  });
+  const parser = createMarkdownParser();
   const defaultValidateLink = parser.validateLink.bind(parser);
 
   parser.validateLink = (url: string) =>
